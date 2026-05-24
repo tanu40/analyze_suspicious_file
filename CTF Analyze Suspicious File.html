@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+  <title>CTF: Analyze Suspicious File | invoice.exe Malware Triage</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: 'Segoe UI', 'Fira Code', 'Consolas', system-ui, monospace;
+    }
+    body {
+      background: linear-gradient(160deg, #0a0a0a 0%, #1a1a1a 50%, #0a0a0a 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+      margin: 0;
+    }
+    .container {
+      max-width: 1200px;
+      width: 100%;
+      background: rgba(20, 20, 20, 0.95);
+      backdrop-filter: blur(28px);
+      border: 1px solid rgba(255, 100, 50, 0.4);
+      box-shadow: 0 25px 50px rgba(255, 80, 0, 0.2);
+      border-radius: 2.5rem;
+      padding: 2rem;
+      color: #d0d0d0;
+      transition: all 0.3s ease;
+    }
+    h1 {
+      font-size: 2.2rem;
+      font-weight: 700;
+      text-align: center;
+      background: linear-gradient(135deg, #ff6b35, #ff3300);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 0.4rem;
+      letter-spacing: 1px;
+    }
+    .subtitle {
+      text-align: center;
+      color: #a0a0a0;
+      margin-bottom: 1.8rem;
+      border-bottom: 1px dashed #3a3a3a;
+      padding-bottom: 1rem;
+      font-style: italic;
+    }
+    .panel {
+      background: rgba(15, 15, 15, 0.9);
+      backdrop-filter: blur(12px);
+      border-radius: 1.8rem;
+      padding: 1.7rem;
+      border: 1px solid #3a3a3a;
+      margin-bottom: 1.8rem;
+    }
+    .hidden {
+      display: none !important;
+    }
+    .flex-row {
+      display: flex;
+      gap: 1.2rem;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    input, button {
+      background: #1a1a1a;
+      border: 1px solid #4a4a4a;
+      border-radius: 2rem;
+      padding: 0.7rem 1.3rem;
+      color: #e0e0e0;
+      font-weight: 500;
+      outline: none;
+      transition: 0.2s;
+      font-size: 0.9rem;
+    }
+    input:focus {
+      border-color: #ff6b35;
+      box-shadow: 0 0 14px #ff4400;
+    }
+    button {
+      background: #2a1a10;
+      border-color: #cc5500;
+      cursor: pointer;
+      font-weight: bold;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+    }
+    button:hover {
+      background: #3a2515;
+      border-color: #ff7730;
+      box-shadow: 0 0 18px #ff5500;
+    }
+    .task-card {
+      background: #111111;
+      border-left: 6px solid #ff6b35;
+      padding: 1.2rem;
+      border-radius: 1.3rem;
+      margin: 1.2rem 0;
+      animation: fadeIn 0.35s ease;
+    }
+    @keyframes fadeIn {
+      0% { opacity: 0; transform: translateY(8px); }
+      100% { opacity: 1; transform: translateY(0); }
+    }
+    .terminal {
+      background: #000000;
+      border: 2px solid #33ff33;
+      border-radius: 1rem;
+      padding: 1rem;
+      margin: 1rem 0;
+      font-family: 'Fira Code', 'Consolas', monospace;
+      font-size: 0.8rem;
+      color: #33ff33;
+      min-height: 200px;
+      max-height: 400px;
+      overflow-y: auto;
+      box-shadow: 0 0 20px rgba(51, 255, 51, 0.2);
+    }
+    .terminal .prompt {
+      color: #33ff33;
+    }
+    .terminal .command {
+      color: #ffffff;
+    }
+    .terminal .output {
+      color: #88ff88;
+    }
+    .terminal .error {
+      color: #ff4444;
+    }
+    .terminal .highlight {
+      color: #ffff00;
+      background: #333300;
+      padding: 0 4px;
+    }
+    .cmd-btn {
+      background: #0a1a0a;
+      border: 1px solid #33ff33;
+      color: #33ff33;
+      font-family: 'Fira Code', monospace;
+      font-size: 0.75rem;
+      padding: 0.4rem 0.8rem;
+      margin: 0.2rem;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+    .cmd-btn:hover {
+      background: #1a3a1a;
+      box-shadow: 0 0 10px #33ff33;
+    }
+    .cmd-btn.active {
+      background: #1a3a1a;
+      border-color: #66ff66;
+      box-shadow: 0 0 15px #33ff33;
+    }
+    .log-line {
+      background: #0a0a0a;
+      border: 1px solid #2a2a2a;
+      padding: 0.5rem 1rem;
+      border-radius: 0.6rem;
+      margin: 0.4rem 0;
+      font-family: 'Fira Code', monospace;
+      font-size: 0.78rem;
+      white-space: pre-wrap;
+      color: #c0c0c0;
+    }
+    .badge {
+      background: #2a2a2a;
+      padding: 0.2rem 0.9rem;
+      border-radius: 20px;
+      font-size: 0.8rem;
+    }
+    .flag-box {
+      background: #1a1a00;
+      border: 2px dashed #ffd700;
+      padding: 0.9rem;
+      border-radius: 20px;
+      text-align: center;
+      font-weight: bold;
+      font-size: 1.4rem;
+      letter-spacing: 3px;
+      color: #ffd700;
+      animation: glowGold 1.7s infinite;
+    }
+    @keyframes glowGold {
+      0% { box-shadow: 0 0 5px #ffd700; }
+      50% { box-shadow: 0 0 30px #ffaa00; }
+      100% { box-shadow: 0 0 5px #ffd700; }
+    }
+    .vt-result {
+      display: inline-block;
+      padding: 0.3rem 0.8rem;
+      border-radius: 1rem;
+      margin: 0.2rem;
+      font-size: 0.8rem;
+    }
+    .vt-malicious {
+      background: #3a1010;
+      border: 1px solid #ff4444;
+      color: #ff6666;
+    }
+    .vt-clean {
+      background: #103a10;
+      border: 1px solid #44ff44;
+      color: #66ff66;
+    }
+    .sandbox-panel {
+      background: #0a0505;
+      border: 2px solid #ff6600;
+      border-radius: 1rem;
+      padding: 1rem;
+      margin: 1rem 0;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 0.8rem;
+    }
+    th {
+      text-align: left;
+      color: #ff8855;
+      border-bottom: 1px solid #3a3a3a;
+      padding: 0.4rem;
+    }
+    td {
+      padding: 0.4rem;
+      border-bottom: 1px solid #2a2a2a;
+    }
+    .status-indicator {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      margin-right: 6px;
+    }
+    .toast {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: #1a1a1a;
+      border: 1px solid #ff6b35;
+      padding: 1rem 1.5rem;
+      border-radius: 2rem;
+      color: #e0e0e0;
+      font-weight: bold;
+      z-index: 9999;
+      animation: slideIn 0.3s ease, fadeOut 0.3s 2.5s forwards;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+    }
+    @keyframes slideIn {
+      from { transform: translateX(100px); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+    @keyframes fadeOut {
+      to { opacity: 0; transform: translateY(-10px); }
+    }
+    code {
+      background: #1a1a1a;
+      padding: 0.2rem 0.6rem;
+      border-radius: 12px;
+      font-family: 'Fira Code', monospace;
+    }
+  </style>
+</head>
+<body>
+<div class="container" id="appContainer">
+  <!-- LOGIN SECTION -->
+  <div id="loginSection">
+    <h1>🦠 MALWARE TRIAGE CTF</h1>
+    <div class="subtitle">Static & Dynamic Analysis · invoice.exe Investigation</div>
+    <div class="panel">
+      <div class="flex-row" style="justify-content: center;">
+        <button id="studentLoginBtn">🎓 Student Access</button>
+        <button id="adminLoginBtn">🛡️ Admin Panel</button>
+      </div>
+      <div id="studentLoginForm" class="hidden" style="margin-top:1.6rem; text-align:center;">
+        <input type="text" id="studentNameInput" placeholder="Your full name" autocomplete="off" style="width:70%;">
+        <input type="password" id="studentPassInput" placeholder="Student batch password" style="width:70%; margin-top:0.7rem;">
+        <button id="studentSubmitLogin" style="margin-top:0.8rem;">🔐 Enter CTF</button>
+        <p style="font-size:0.8rem; color:#a0a0a0; margin-top:0.5rem;">Default password: <code>malware2025</code></p>
+      </div>
+      <div id="adminLoginForm" class="hidden" style="margin-top:1.6rem; text-align:center;">
+        <input type="password" id="adminPassInput" placeholder="Admin password">
+        <button id="adminSubmitLogin" style="margin-top:0.8rem;">🔑 Admin Login</button>
+        <p style="font-size:0.8rem; color:#a0a0a0; margin-top:0.5rem;">Default admin: <code>admin123</code></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- STUDENT DASHBOARD -->
+  <div id="studentDashboard" class="hidden">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <h2 style="color:#ff6b35;">👤 <span id="displayStudentName"></span></h2>
+      <button id="logoutStudentBtn">🚪 Logout</button>
+    </div>
+    <div id="taskContainer"></div>
+  </div>
+
+  <!-- ADMIN PANEL -->
+  <div id="adminDashboard" class="hidden">
+    <div style="display:flex; justify-content:space-between;">
+      <h2 style="color:#ff8855;">🛡️ ADMINISTRATOR</h2>
+      <button id="logoutAdminBtn">Exit</button>
+    </div>
+    <div class="panel">
+      <h3>🔐 Student Batch Password</h3>
+      <p style="font-size:0.8rem; color:#a0a0a0; margin-bottom:0.5rem;">Current: <code id="currentStudentPassDisplay"></code></p>
+      <div class="flex-row">
+        <input type="text" id="newStudentPassword" placeholder="New student password">
+        <button id="updateStudentPasswordBtn">Update</button>
+      </div>
+      <hr style="border-color:#3a3a3a; margin:1.2rem 0;">
+      <h3>🔑 Change Admin Password</h3>
+      <p style="font-size:0.8rem; color:#a0a0a0; margin-bottom:0.5rem;">Current: <code id="currentAdminPassDisplay"></code></p>
+      <div class="flex-row">
+        <input type="password" id="newAdminPassword" placeholder="New admin password">
+        <button id="updateAdminPasswordBtn">Update</button>
+      </div>
+      <hr style="border-color:#3a3a3a; margin:1.2rem 0;">
+      <h3>📋 Student Progress</h3>
+      <div id="adminStudentList"></div>
+      <button id="resetAllProgressBtn" style="background:#3a1a1a; border-color:#aa3030; margin-top:1rem;">⚠️ Reset All Student Progress</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function() {
+    // ============ STORAGE KEYS ============
+    const ADMIN_PASS_KEY = 'malware_admin_pass_v2';
+    const STUDENT_PASS_KEY = 'malware_student_pass_v2';
+    const STUDENTS_DB_KEY = 'malware_students_db_v2';
+    const INITIALIZED_KEY = 'malware_initialized_v2';
+
+    // ============ DEFAULT VALUES ============
+    const DEFAULT_ADMIN_PASS = 'admin123';
+    const DEFAULT_STUDENT_PASS = 'malware2025';
+
+    // ============ INITIALIZATION ============
+    function initializeStorage() {
+      if (!localStorage.getItem(INITIALIZED_KEY)) {
+        if (!localStorage.getItem(ADMIN_PASS_KEY)) {
+          localStorage.setItem(ADMIN_PASS_KEY, DEFAULT_ADMIN_PASS);
+        }
+        if (!localStorage.getItem(STUDENT_PASS_KEY)) {
+          localStorage.setItem(STUDENT_PASS_KEY, DEFAULT_STUDENT_PASS);
+        }
+        if (!localStorage.getItem(STUDENTS_DB_KEY)) {
+          localStorage.setItem(STUDENTS_DB_KEY, JSON.stringify([]));
+        }
+        localStorage.setItem(INITIALIZED_KEY, 'true');
+      }
+    }
+    initializeStorage();
+
+    // ============ STATE ============
+    let currentUser = null;
+    let adminActive = false;
+    let terminalHistory = [];
+
+    // ============ TASKS ============
+    const tasks = [
+      { id: 1, title: "🔍 Task 1: VirusTotal Check", desc: "Check MD5 hash on VirusTotal. How many engines detect it as malicious?", answer: "3", extra: "virustotal" },
+      { id: 2, title: "📝 Task 2: Strings Analysis", desc: "Use 'strings' command to extract IP address from invoice.exe (format: x.x.x.x)", answer: "192.168.100.50", extra: "strings" },
+      { id: 3, title: "📦 Task 3: Packer Detection", desc: "Check entropy. Is the file packed? (yes/no)", answer: "yes", extra: "packer" },
+      { id: 4, title: "🏖️ Task 4: Sandbox Analysis", desc: "Run in sandbox. Which registry persistence key does malware create? (exact path)", answer: "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\\InvoiceHelper", extra: "sandbox" },
+      { id: 5, title: "📊 Task 5: Extract IOCs", desc: "List all IOCs found (format: 'IP,hash,filename' without spaces after commas)", answer: "192.168.100.50,d41d8cd98f00b204e9800998ecf8427e,invoice.exe", extra: "iocs" }
+    ];
+
+    // ============ SIMULATED DATA ============
+    const fileHash = "d41d8cd98f00b204e9800998ecf8427e";
+    const maliciousIP = "192.168.100.50";
+    
+    const stringsOutput = `
+    [Strings output for invoice.exe - 2000+ strings found]
+    ...
+    !This program cannot be run in DOS mode
+    .text
+    .rdata
+    .data
+    .rsrc
+    kernel32.dll
+    user32.dll
+    ws2_32.dll
+    CreateProcessA
+    VirtualAlloc
+    GetProcAddress
+    LoadLibraryA
+    ${maliciousIP}
+    /upload.php
+    Mozilla/5.0
+    POST
+    Content-Type: application/octet-stream
+    Software\\Microsoft\\Windows\\CurrentVersion\\Run
+    InvoiceHelper
+    cmd.exe
+    /c ping
+    SeDebugPrivilege
+    OpenProcessToken
+    AdjustTokenPrivileges
+    ...
+    `;
+
+    const virusTotalResult = [
+      { engine: "Avast", detection: "Win32:Trojan-gen" },
+      { engine: "Kaspersky", detection: "Trojan.Win32.Agent" },
+      { engine: "Malwarebytes", detection: "Trojan.Downloader" },
+      { engine: "ESET", detection: "" },
+      { engine: "BitDefender", detection: "" },
+      { engine: "Windows Defender", detection: "" },
+      { engine: "McAfee", detection: "" }
+    ];
+
+    const sandboxResults = {
+      processTree: "invoice.exe (PID: 4520) → cmd.exe (PID: 4521) → powershell.exe (PID: 4522)",
+      networkConnections: [`TCP ${maliciousIP}:443 (HTTPS)`, "TCP 8.8.8.8:53 (DNS)"],
+      registryChanges: [
+        "SET: HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\\InvoiceHelper = C:\\Users\\Victim\\AppData\\Local\\Temp\\invoice.exe",
+        "SET: HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce\\Update = C:\\Windows\\Temp\\update.bat"
+      ],
+      fileChanges: [
+        "CREATE: C:\\Users\\Victim\\AppData\\Local\\Temp\\invoice.exe",
+        "CREATE: C:\\Windows\\Temp\\dump.bin"
+      ]
+    };
+
+    // ============ HELPERS ============
+    function getStudents() {
+      try { return JSON.parse(localStorage.getItem(STUDENTS_DB_KEY) || '[]'); }
+      catch(e) { return []; }
+    }
+    
+    function saveStudents(arr) { 
+      localStorage.setItem(STUDENTS_DB_KEY, JSON.stringify(arr)); 
+    }
+    
+    function getStudentPassword() { 
+      return localStorage.getItem(STUDENT_PASS_KEY) || DEFAULT_STUDENT_PASS; 
+    }
+    
+    function getAdminPassword() { 
+      return localStorage.getItem(ADMIN_PASS_KEY) || DEFAULT_ADMIN_PASS; 
+    }
+
+    function showToast(message, isError = false) {
+      const existingToast = document.querySelector('.toast');
+      if (existingToast) existingToast.remove();
+      
+      const toast = document.createElement('div');
+      toast.className = 'toast';
+      toast.style.background = isError ? '#3a1a1a' : '#1a1a1a';
+      toast.style.borderColor = isError ? '#aa3030' : '#ff6b35';
+      toast.style.color = isError ? '#ffaaaa' : '#e0e0e0';
+      toast.textContent = message;
+      document.body.appendChild(toast);
+      
+      setTimeout(() => {
+        if (toast.parentNode) toast.remove();
+      }, 3000);
+    }
+
+    function updateCompletion(name, taskId) {
+      let students = getStudents();
+      let s = students.find(s => s.name.toLowerCase() === name.toLowerCase());
+      if (s && !s.completedTasks.includes(taskId)) {
+        s.completedTasks.push(taskId);
+        saveStudents(students);
+        if (currentUser && currentUser.name.toLowerCase() === name.toLowerCase()) {
+          currentUser.completedTasks = [...s.completedTasks];
+        }
+        return true;
+      }
+      return false;
+    }
+
+    // ============ TERMINAL SIMULATION ============
+    function createTerminal() {
+      let html = '<p style="color:#ff8855; margin-bottom:0.5rem;">💻 Malware Analysis Terminal (click commands):</p>';
+      html += '<div style="display:flex; flex-wrap:wrap; gap:0.3rem; margin-bottom:0.5rem;">';
+      html += '<button class="cmd-btn" onclick="runCommand(\'file invoice.exe\')">file invoice.exe</button>';
+      html += '<button class="cmd-btn" onclick="runCommand(\'md5sum invoice.exe\')">md5sum invoice.exe</button>';
+      html += '<button class="cmd-btn" onclick="runCommand(\'strings invoice.exe\')">strings invoice.exe</button>';
+      html += '<button class="cmd-btn" onclick="runCommand(\'pecheck invoice.exe\')">pecheck invoice.exe</button>';
+      html += '<button class="cmd-btn" onclick="runCommand(\'entropy invoice.exe\')">entropy invoice.exe</button>';
+      html += '<button class="cmd-btn" onclick="runCommand(\'vtcheck invoice.exe\')">vtcheck invoice.exe</button>';
+      html += '<button class="cmd-btn" onclick="runCommand(\'sandbox invoice.exe\')">sandbox invoice.exe</button>';
+      html += '<button class="cmd-btn" onclick="runCommand(\'clear\')">clear</button>';
+      html += '</div>';
+      html += '<div class="terminal" id="terminalOutput">';
+      html += '<div><span class="prompt">analyst@triage:~$ </span><span class="command">ready</span></div>';
+      html += '<div class="output">Type a command or click buttons above. Start with vtcheck or strings.</div>';
+      html += '</div>';
+      return html;
+    }
+
+    window.runCommand = function(cmd) {
+      const terminal = document.getElementById('terminalOutput');
+      if (!terminal) return;
+      
+      // Add command to terminal
+      let output = terminal.innerHTML;
+      output += `<div><span class="prompt">analyst@triage:~$ </span><span class="command">${cmd}</span></div>`;
+      
+      // Process command
+      const cmdLower = cmd.toLowerCase().trim();
+      
+      if (cmdLower === 'clear') {
+        terminal.innerHTML = '<div><span class="prompt">analyst@triage:~$ </span><span class="command">clear</span></div>';
+        return;
+      }
+      
+      if (cmdLower.startsWith('file ')) {
+        output += '<div class="output">invoice.exe: PE32 executable (GUI) Intel 80386, for MS Windows</div>';
+        output += '<div class="output">Compiled: 2024-03-15 14:30:22</div>';
+        output += '<div class="output">Sections: .text .rdata .data .rsrc</div>';
+      } else if (cmdLower.startsWith('md5sum ')) {
+        output += `<div class="output">MD5: <span class="highlight">${fileHash}</span></div>`;
+      } else if (cmdLower.startsWith('strings ')) {
+        output += `<div class="output" style="white-space:pre-wrap;">${stringsOutput}</div>`;
+        output += '<div class="output" style="color:#ff8855;">⚠️ Found IP address: <span class="highlight">192.168.100.50</span></div>';
+      } else if (cmdLower.startsWith('pecheck ')) {
+        output += '<div class="output">PE Header Analysis:</div>';
+        output += '<div class="output">  Entry Point: 0x00401000</div>';
+        output += '<div class="output">  Number of Sections: 4</div>';
+        output += '<div class="output">  Timestamp: 2024-03-15 14:30:22</div>';
+        output += '<div class="output">  Subsystem: Windows GUI</div>';
+        output += '<div class="output">  Imported DLLs: kernel32.dll, user32.dll, ws2_32.dll, advapi32.dll</div>';
+      } else if (cmdLower.startsWith('entropy ')) {
+        output += '<div class="output">Entropy Analysis:</div>';
+        output += '<div class="output">  .text section: 7.2 (HIGH - likely packed/encrypted)</div>';
+        output += '<div class="output">  .rdata section: 6.8 (HIGH)</div>';
+        output += '<div class="output">  .data section: 5.1 (MEDIUM)</div>';
+        output += '<div class="output">  Overall entropy: 7.1</div>';
+        output += '<div class="output" style="color:#ff4444;">⚠️ WARNING: High entropy indicates PACKED executable!</div>';
+      } else if (cmdLower.startsWith('vtcheck ')) {
+        output += '<div class="output">VirusTotal Results for MD5: ' + fileHash + '</div>';
+        output += '<div class="output">Detection Ratio: 3/7</div>';
+        virusTotalResult.forEach(r => {
+          const cls = r.detection ? 'vt-malicious' : 'vt-clean';
+          output += `<div class="output"><span class="vt-result ${cls}">${r.engine}: ${r.detection || 'Clean'}</span></div>`;
+        });
+        output += '<div class="output" style="color:#ff4444;">⚠️ 3 engines detected this file as MALICIOUS</div>';
+      } else if (cmdLower.startsWith('sandbox ')) {
+        output += '<div class="output">🏖️ Running invoice.exe in sandbox...</div>';
+        output += '<div class="output">[+] Process Tree:</div>';
+        output += `<div class="output">    ${sandboxResults.processTree}</div>`;
+        output += '<div class="output">[+] Network Connections:</div>';
+        sandboxResults.networkConnections.forEach(c => {
+          output += `<div class="output">    ${c}</div>`;
+        });
+        output += '<div class="output">[+] Registry Changes:</div>';
+        sandboxResults.registryChanges.forEach(r => {
+          output += `<div class="output" style="color:#ff4444;">    ${r}</div>`;
+        });
+        output += '<div class="output">[+] File Changes:</div>';
+        sandboxResults.fileChanges.forEach(f => {
+          output += `<div class="output">    ${f}</div>`;
+        });
+        output += '<div class="output" style="color:#ff4444;">⚠️ PERSISTENCE FOUND: Run key registry entry!</div>';
+      } else {
+        output += `<div class="error">Command not found: ${cmd}</div>`;
+        output += '<div class="output">Available: file, md5sum, strings, pecheck, entropy, vtcheck, sandbox, clear</div>';
+      }
+      
+      terminal.innerHTML = output;
+      terminal.scrollTop = terminal.scrollHeight;
+    };
+
+    // ============ RENDER ============
+    function renderTasks() {
+      if (!currentUser) return;
+      document.getElementById('displayStudentName').innerText = currentUser.name;
+      const container = document.getElementById('taskContainer');
+      const completed = currentUser.completedTasks || [];
+      
+      let html = '<h3 style="margin-bottom:1rem;">🦠 Malware Triage Workstation</h3>';
+      
+      // Terminal emulator
+      html += createTerminal();
+
+      tasks.forEach(task => {
+        const done = completed.includes(task.id);
+        html += `<div class="task-card" style="border-left-color: ${done ? '#2ecc71' : '#ff6b35'}; animation-delay: ${task.id * 0.1}s;">`;
+        html += `<strong>${task.title}</strong> <span class="badge">${done ? '✅ Complete' : '🔒 Pending'}</span>`;
+        html += `<p style="margin:0.4rem 0;">${task.desc}</p>`;
+
+        if (task.extra === 'virustotal') {
+          html += '<div class="log-line">📊 VirusTotal Scan Summary:</div>';
+          html += '<div class="log-line">MD5: ' + fileHash + '</div>';
+          html += '<div class="log-line">Detection Ratio: <span style="color:#ff4444;">3/7 engines detected</span></div>';
+        } else if (task.extra === 'strings') {
+          html += '<div class="log-line">📝 Use terminal: "strings invoice.exe" to find hidden data</div>';
+        } else if (task.extra === 'packer') {
+          html += '<div class="log-line">📦 Use terminal: "entropy invoice.exe" to check packing</div>';
+        } else if (task.extra === 'sandbox') {
+          html += '<div class="sandbox-panel">';
+          html += '<p style="color:#ff8855;">🏖️ Sandbox Execution Results:</p>';
+          html += '<p style="font-size:0.8rem;">Process: ' + sandboxResults.processTree + '</p>';
+          html += '<p style="font-size:0.8rem;">Network: ' + sandboxResults.networkConnections.join(', ') + '</p>';
+          html += '<p style="font-size:0.8rem; color:#ff4444;">Registry Persistence: ' + sandboxResults.registryChanges[0] + '</p>';
+          html += '</div>';
+        } else if (task.extra === 'iocs') {
+          html += '<div class="log-line">📊 Collected IOCs from analysis:</div>';
+          html += '<div class="log-line">• IP: ' + maliciousIP + '</div>';
+          html += '<div class="log-line">• Hash: ' + fileHash + '</div>';
+          html += '<div class="log-line">• Filename: invoice.exe</div>';
+        }
+
+        if (!done) {
+          html += `<div style="display:flex; gap:0.5rem; align-items:center; margin-top:0.5rem;">`;
+          html += `<input type="text" id="answerInput${task.id}" placeholder="Your answer" style="flex:1;">`;
+          html += `<button onclick="submitTask(${task.id})">✅ Submit</button>`;
+          html += `</div>`;
+        } else {
+          html += `<p style="color:#9effb7; font-weight:bold;">✔ Task Completed Successfully</p>`;
+        }
+        html += '</div>';
+      });
+
+      if (completed.length === tasks.length) {
+        html += '<div class="flag-box" style="animation: glowGold 1.7s infinite, fadeIn 0.5s ease;">';
+        html += '🏆 FLAG{INVOICE_EXE_IOCS} 🏆';
+        html += '</div>';
+        html += '<p style="text-align:center; color:#ffd700; margin-top:0.5rem;">🎉 Excellent malware triage! All IOCs extracted successfully.</p>';
+      }
+      
+      container.innerHTML = html;
+    }
+
+    window.submitTask = function(taskId) {
+      if (!currentUser) return;
+      const input = document.getElementById(`answerInput${taskId}`);
+      if (!input) return;
+      const ans = input.value.trim();
+      const task = tasks.find(t => t.id === taskId);
+      if (!task) return;
+      
+      let isCorrect = false;
+      
+      // Task 5: IOC extraction - more flexible checking
+      if (taskId === 5) {
+        const lowerAns = ans.toLowerCase();
+        const hasIP = lowerAns.includes('192.168.100.50');
+        const hasHash = lowerAns.includes('d41d8cd98f00b204e9800998ecf8427e');
+        const hasFilename = lowerAns.includes('invoice.exe');
+        isCorrect = hasIP && hasHash && hasFilename;
+      } else {
+        isCorrect = ans.toLowerCase() === task.answer.toLowerCase();
+      }
+      
+      if (isCorrect) {
+        const wasNew = updateCompletion(currentUser.name, taskId);
+        if (wasNew) {
+          showToast('✅ Correct! Task completed successfully.');
+        } else {
+          showToast('ℹ️ Task was already completed.');
+        }
+        renderTasks();
+      } else {
+        showToast('❌ Incorrect answer. Review the analysis results carefully.', true);
+        input.style.animation = 'shake 0.5s ease';
+        setTimeout(() => { input.style.animation = ''; }, 500);
+      }
+    };
+
+    function renderAdminList() {
+      const students = getStudents();
+      const cont = document.getElementById('adminStudentList');
+      if (!cont) return;
+      
+      document.getElementById('currentStudentPassDisplay').textContent = getStudentPassword();
+      document.getElementById('currentAdminPassDisplay').textContent = getAdminPassword();
+      
+      if (students.length === 0) {
+        cont.innerHTML = '<p style="color:#a0a0a0;">📭 No students have logged in yet.</p>';
+        return;
+      }
+      
+      let html = '<table><tr><th>Student Name</th><th>Tasks Completed</th><th>Progress</th><th>Status</th></tr>';
+      students.forEach(s => {
+        const cnt = (s.completedTasks || []).length;
+        const percentage = Math.round((cnt / tasks.length) * 100);
+        const statusColor = cnt === tasks.length ? '#2ecc71' : cnt > 0 ? '#f39c12' : '#e74c3c';
+        html += `<tr>
+          <td>${escapeHtml(s.name)}</td>
+          <td>${cnt} / ${tasks.length}</td>
+          <td>
+            <div style="background:#1a1a1a; border-radius:10px; height:8px; width:100px; overflow:hidden;">
+              <div style="width:${percentage}%; height:100%; background:${statusColor}; transition: width 0.3s;"></div>
+            </div>
+          </td>
+          <td><span class="status-indicator" style="background:${statusColor};"></span>${cnt === tasks.length ? 'Flag Obtained' : cnt > 0 ? 'In Progress' : 'Not Started'}</td>
+        </tr>`;
+      });
+      html += '</table>';
+      cont.innerHTML = html;
+    }
+
+    function escapeHtml(t) { 
+      return String(t).replace(/[&<>"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[m]); 
+    }
+
+    // ============ VIEW SWITCHING ============
+    function showLogin() {
+      document.getElementById('loginSection').classList.remove('hidden');
+      document.getElementById('studentDashboard').classList.add('hidden');
+      document.getElementById('adminDashboard').classList.add('hidden');
+      document.getElementById('studentLoginForm').classList.add('hidden');
+      document.getElementById('adminLoginForm').classList.add('hidden');
+      currentUser = null; 
+      adminActive = false;
+    }
+
+    function showStudentDash() {
+      document.getElementById('loginSection').classList.add('hidden');
+      document.getElementById('studentDashboard').classList.remove('hidden');
+      document.getElementById('adminDashboard').classList.add('hidden');
+      renderTasks();
+    }
+
+    function showAdminDash() {
+      document.getElementById('loginSection').classList.add('hidden');
+      document.getElementById('studentDashboard').classList.add('hidden');
+      document.getElementById('adminDashboard').classList.remove('hidden');
+      renderAdminList();
+    }
+
+    // ============ EVENT LISTENERS ============
+    document.addEventListener('DOMContentLoaded', ()=>{
+      document.getElementById('studentLoginBtn').addEventListener('click', ()=>{
+        document.getElementById('studentLoginForm').classList.remove('hidden');
+        document.getElementById('adminLoginForm').classList.add('hidden');
+      });
+      
+      document.getElementById('adminLoginBtn').addEventListener('click', ()=>{
+        document.getElementById('adminLoginForm').classList.remove('hidden');
+        document.getElementById('studentLoginForm').classList.add('hidden');
+      });
+
+      document.getElementById('studentSubmitLogin').addEventListener('click', ()=>{
+        const name = document.getElementById('studentNameInput').value.trim();
+        const pass = document.getElementById('studentPassInput').value.trim();
+        
+        if(!name || !pass) {
+          showToast('Please enter both name and password.', true);
+          return;
+        }
+        
+        if(pass !== getStudentPassword()) {
+          showToast('Invalid student batch password.', true);
+          return;
+        }
+        
+        let students = getStudents();
+        let stu = students.find(s => s.name.toLowerCase() === name.toLowerCase());
+        if(!stu) { 
+          stu = {name, completedTasks: []}; 
+          students.push(stu); 
+          saveStudents(students);
+          showToast(`Welcome, ${name}! New profile created.`);
+        } else {
+          showToast(`Welcome back, ${name}!`);
+        }
+        
+        currentUser = {name: stu.name, completedTasks: [...stu.completedTasks]};
+        document.getElementById('studentNameInput').value = '';
+        document.getElementById('studentPassInput').value = '';
+        showStudentDash();
+      });
+
+      document.getElementById('adminSubmitLogin').addEventListener('click', ()=>{
+        const pass = document.getElementById('adminPassInput').value.trim();
+        if(pass === getAdminPassword()){
+          adminActive = true; 
+          document.getElementById('adminPassInput').value = ''; 
+          showToast('Admin access granted.');
+          showAdminDash();
+        } else {
+          showToast('Invalid admin password.', true);
+        }
+      });
+
+      document.getElementById('logoutStudentBtn').addEventListener('click', ()=>{
+        showToast('Logged out successfully.');
+        showLogin();
+      });
+      
+      document.getElementById('logoutAdminBtn').addEventListener('click', ()=>{
+        showToast('Admin logged out.');
+        showLogin();
+      });
+
+      document.getElementById('updateStudentPasswordBtn').addEventListener('click', ()=>{
+        if (!adminActive) return;
+        const np = document.getElementById('newStudentPassword').value.trim();
+        if(!np) {
+          showToast('Please enter a new password.', true);
+          return;
+        }
+        localStorage.setItem(STUDENT_PASS_KEY, np);
+        showToast('✅ Student password updated successfully!');
+        document.getElementById('newStudentPassword').value = '';
+        renderAdminList();
+      });
+
+      document.getElementById('updateAdminPasswordBtn').addEventListener('click', ()=>{
+        if (!adminActive) return;
+        const np = document.getElementById('newAdminPassword').value.trim();
+        if(!np) {
+          showToast('Please enter a new admin password.', true);
+          return;
+        }
+        localStorage.setItem(ADMIN_PASS_KEY, np);
+        showToast('✅ Admin password changed successfully!');
+        document.getElementById('newAdminPassword').value = '';
+        renderAdminList();
+      });
+
+      document.getElementById('resetAllProgressBtn').addEventListener('click', ()=>{
+        if (!adminActive) return;
+        if (confirm('⚠️ Are you sure you want to reset ALL student progress? This cannot be undone.')) {
+          saveStudents([]);
+          showToast('All student progress has been reset.');
+          renderAdminList();
+        }
+      });
+
+      // Add shake animation
+      const style = document.createElement('style');
+      style.textContent = `
+        @keyframes shake {
+          0%, 100% { transform: translateX(0); }
+          25% { transform: translateX(-10px); }
+          75% { transform: translateX(10px); }
+        }
+      `;
+      document.head.appendChild(style);
+
+      showLogin();
+    });
+  })();
+</script>
+</body>
+</html>
